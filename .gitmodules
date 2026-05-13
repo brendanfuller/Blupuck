@@ -1,0 +1,3 @@
+[submodule "firmware/lib/bluepad32"]
+	path = firmware/lib/bluepad32
+	url = https://github.com/ricardoquesada/bluepad32.git
