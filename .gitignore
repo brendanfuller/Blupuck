@@ -1,0 +1,26 @@
+# Firmware build artifacts
+firmware/build/
+firmware/cmake-build-*/
+*.uf2
+*.elf
+*.bin
+*.hex
+*.map
+
+# Web app
+webui/node_modules/
+webui/dist/
+webui/dist-ssr/
+webui/.vite/
+webui/*.local
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
+*.swo
+
+# Local env
+.env
+.env.local

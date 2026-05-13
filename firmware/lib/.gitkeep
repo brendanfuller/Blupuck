@@ -1,0 +1,4 @@
+Submodules land here:
+  bluepad32/   — git submodule add https://github.com/ricardoquesada/bluepad32
+  btstack/     — pulled in transitively by bluepad32
+  tinyusb/     — vendored via pico-sdk; submodule only if pinning a fork
