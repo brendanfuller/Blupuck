@@ -6,7 +6,7 @@
 #include "gamepad_state.h"
 #include "log.h"
 #include "translate.h"
-#include "usb_hid.h"
+#include "usb_xinput.h"
 
 static void on_init(int argc, const char** argv) {
     (void)argc;
@@ -40,7 +40,7 @@ static void on_device_disconnected(uni_hid_device_t* d) {
     log_u((uint32_t)idx);
     log_line("");
     if (idx < 0 || idx >= BRIDGE_MAX_PLAYERS) return;
-    usb_hid_set_controller_present((uint8_t)idx, false);
+    usb_xinput_set_controller_present((uint8_t)idx, false);
 }
 
 static uni_error_t on_device_ready(uni_hid_device_t* d) {
@@ -55,7 +55,7 @@ static uni_error_t on_device_ready(uni_hid_device_t* d) {
     if (d->report_parser.set_player_leds != NULL) {
         d->report_parser.set_player_leds(d, (uint8_t)(1u << idx));
     }
-    usb_hid_set_controller_present((uint8_t)idx, true);
+    usb_xinput_set_controller_present((uint8_t)idx, true);
     return UNI_ERROR_SUCCESS;
 }
 
@@ -66,7 +66,16 @@ static void on_controller_data(uni_hid_device_t* d, uni_controller_t* ctl) {
 
     bridge_gp_state_t state;
     translate_gamepad(&ctl->gamepad, &state);
-    usb_hid_set_gamepad((uint8_t)idx, &state);
+    usb_xinput_set_gamepad((uint8_t)idx, &state);
+
+    // Pump XInput rumble commands back to the physical controller.
+    // play_dual_rumble takes (delay_ms, duration_ms, weak_magnitude, strong_magnitude).
+    uint8_t strong, weak;
+    if (usb_xinput_poll_rumble((uint8_t)idx, &strong, &weak)) {
+        if (d->report_parser.play_dual_rumble != NULL) {
+            d->report_parser.play_dual_rumble(d, 0, 250, weak, strong);
+        }
+    }
 }
 
 static const uni_property_t* get_property(uni_property_idx_t idx) {

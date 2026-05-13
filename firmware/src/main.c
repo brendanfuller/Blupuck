@@ -5,7 +5,7 @@
 
 #include "bt_host.h"
 #include "log.h"
-#include "usb_hid.h"
+#include "usb_xinput.h"
 
 // btstack owns the run loop; the USB stack is ticked from a repeating timer.
 // Keeping tinyusb headers out of main.c avoids the btstack-vs-tinyusb HID
@@ -14,7 +14,7 @@
 static btstack_timer_source_t usb_tick;
 
 static void usb_tick_handler(btstack_timer_source_t* ts) {
-    usb_hid_tick();
+    usb_xinput_tick();
     btstack_run_loop_set_timer(ts, 1);
     btstack_run_loop_add_timer(ts);
 }
@@ -28,7 +28,7 @@ int main(void) {
     // bluepad32/btstack is up.
     cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
 
-    usb_hid_init();
+    usb_xinput_init();
 
     uni_platform_set_custom(bt_host_get_platform());
     uni_init(0, NULL);

@@ -23,7 +23,7 @@ add_executable(bridge
     src/bt_bonds.c
     src/log.c
     src/usb_descriptors.c
-    src/usb_hid.c
+    src/usb_xinput.c
     src/usb_cdc.c
     src/usb_webusb.c
     src/translate.c
