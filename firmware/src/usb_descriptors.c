@@ -2,24 +2,27 @@
 #include <tusb.h>
 
 // Dev/test VID:PID — not for shipping hardware. Replace before production.
-#define BRIDGE_VID 0xCafe
-#define BRIDGE_PID 0x4000
+#define BLUPUCK_VID 0xCafe
+#define BLUPUCK_PID 0x4000
 
-enum { ITF_NUM_HID = 0, ITF_NUM_TOTAL };
-
-#define EPNUM_HID 0x81
-#define CONFIG_TOTAL_LEN (TUD_CONFIG_DESC_LEN + TUD_HID_DESC_LEN)
+// All 4 HID interfaces are always enumerated; we don't do live USB
+// re-enumeration as slots fill/empty. This keeps Steam Input and the host
+// USB stack happy at the cost of four "phantom" gamepads visible to the
+// host even with no controllers paired. The phantom slots stay silent
+// (no reports sent) until a controller is bound to them.
 
 static const tusb_desc_device_t desc_device = {
     .bLength = sizeof(tusb_desc_device_t),
     .bDescriptorType = TUSB_DESC_DEVICE,
     .bcdUSB = 0x0200,
-    .bDeviceClass = 0,
-    .bDeviceSubClass = 0,
-    .bDeviceProtocol = 0,
+    // Use a composite-device class triplet so Windows treats the device as a
+    // multi-function container and lets each interface bind its own driver.
+    .bDeviceClass = TUSB_CLASS_MISC,
+    .bDeviceSubClass = MISC_SUBCLASS_COMMON,
+    .bDeviceProtocol = MISC_PROTOCOL_IAD,
     .bMaxPacketSize0 = CFG_TUD_ENDPOINT0_SIZE,
-    .idVendor = BRIDGE_VID,
-    .idProduct = BRIDGE_PID,
+    .idVendor = BLUPUCK_VID,
+    .idProduct = BLUPUCK_PID,
     .bcdDevice = 0x0100,
     .iManufacturer = 1,
     .iProduct = 2,
@@ -31,19 +34,100 @@ static const uint8_t desc_hid_report[] = {
     TUD_HID_REPORT_DESC_GAMEPAD(),
 };
 
-static const uint8_t desc_configuration[] = {
-    TUD_CONFIG_DESCRIPTOR(1, ITF_NUM_TOTAL, 0, CONFIG_TOTAL_LEN,
-                          TUSB_DESC_CONFIG_ATT_REMOTE_WAKEUP, 100),
-    TUD_HID_DESCRIPTOR(ITF_NUM_HID, 0, HID_ITF_PROTOCOL_NONE,
-                       sizeof(desc_hid_report), EPNUM_HID,
-                       CFG_TUD_HID_EP_BUFSIZE, 1 /* poll interval ms */),
+enum {
+    STR_LANG    = 0,
+    STR_MFR     = 1,
+    STR_PRODUCT = 2,
+    STR_SERIAL  = 3,
+    STR_CDC     = 4,
+    STR_CTRL_1  = 5,
+    STR_CTRL_2  = 6,
+    STR_CTRL_3  = 7,
+    STR_CTRL_4  = 8,
+};
+
+// CDC occupies interfaces 0 and 1 and is always present (it's the always-on
+// debug channel). HID gamepads, when present, start at interface 2.
+#define ITF_CDC_CTRL   0
+#define ITF_CDC_DATA   1
+#define ITF_HID_FIRST  2
+
+// CDC endpoints (notification IN, data OUT, data IN).
+#define EP_CDC_NOTIF   0x81
+#define EP_CDC_OUT     0x02
+#define EP_CDC_IN      0x82
+
+// HID endpoint IN for the Nth gamepad instance.
+#define EP_HID_IN(n)   (uint8_t)(0x83 + (n))
+
+#define CDC_NOTIF_SIZE 8
+#define CDC_BULK_SIZE  64
+
+#define HID_ITF(n, str_idx)                                                 \
+    TUD_HID_DESCRIPTOR((uint8_t)(ITF_HID_FIRST + (n)), str_idx,              \
+                       HID_ITF_PROTOCOL_NONE,                                \
+                       sizeof(desc_hid_report), EP_HID_IN(n),                \
+                       CFG_TUD_HID_EP_BUFSIZE, /*poll ms*/ 1)
+
+#define CONFIG_LEN_0 (TUD_CONFIG_DESC_LEN + TUD_CDC_DESC_LEN)
+#define CONFIG_LEN_1 (CONFIG_LEN_0 + TUD_HID_DESC_LEN)
+#define CONFIG_LEN_2 (CONFIG_LEN_0 + 2 * TUD_HID_DESC_LEN)
+#define CONFIG_LEN_3 (CONFIG_LEN_0 + 3 * TUD_HID_DESC_LEN)
+#define CONFIG_LEN_4 (CONFIG_LEN_0 + 4 * TUD_HID_DESC_LEN)
+
+#define CDC_PART \
+    TUD_CDC_DESCRIPTOR(ITF_CDC_CTRL, STR_CDC, EP_CDC_NOTIF, CDC_NOTIF_SIZE,  \
+                       EP_CDC_OUT, EP_CDC_IN, CDC_BULK_SIZE)
+
+static const uint8_t desc_config_0[] = {
+    TUD_CONFIG_DESCRIPTOR(1, 2, 0, CONFIG_LEN_0, TUSB_DESC_CONFIG_ATT_REMOTE_WAKEUP, 100),
+    CDC_PART,
+};
+
+static const uint8_t desc_config_1[] = {
+    TUD_CONFIG_DESCRIPTOR(1, 3, 0, CONFIG_LEN_1, TUSB_DESC_CONFIG_ATT_REMOTE_WAKEUP, 100),
+    CDC_PART,
+    HID_ITF(0, STR_CTRL_1),
+};
+
+static const uint8_t desc_config_2[] = {
+    TUD_CONFIG_DESCRIPTOR(1, 4, 0, CONFIG_LEN_2, TUSB_DESC_CONFIG_ATT_REMOTE_WAKEUP, 100),
+    CDC_PART,
+    HID_ITF(0, STR_CTRL_1),
+    HID_ITF(1, STR_CTRL_2),
+};
+
+static const uint8_t desc_config_3[] = {
+    TUD_CONFIG_DESCRIPTOR(1, 5, 0, CONFIG_LEN_3, TUSB_DESC_CONFIG_ATT_REMOTE_WAKEUP, 100),
+    CDC_PART,
+    HID_ITF(0, STR_CTRL_1),
+    HID_ITF(1, STR_CTRL_2),
+    HID_ITF(2, STR_CTRL_3),
+};
+
+static const uint8_t desc_config_4[] = {
+    TUD_CONFIG_DESCRIPTOR(1, 6, 0, CONFIG_LEN_4, TUSB_DESC_CONFIG_ATT_REMOTE_WAKEUP, 100),
+    CDC_PART,
+    HID_ITF(0, STR_CTRL_1),
+    HID_ITF(1, STR_CTRL_2),
+    HID_ITF(2, STR_CTRL_3),
+    HID_ITF(3, STR_CTRL_4),
+};
+
+static const uint8_t* const desc_configs[] = {
+    desc_config_0, desc_config_1, desc_config_2, desc_config_3, desc_config_4,
 };
 
 static const char* string_desc[] = {
-    (const char[]){0x09, 0x04},  // 0: English (US)
-    "Bridge",                    // 1: Manufacturer
-    "BT Controller Bridge",      // 2: Product
-    "000000000001",              // 3: Serial — TODO read from flash UID
+    (const char[]){0x09, 0x04},   // 0: English (US) langid
+    "Blupuck",                    // 1: Manufacturer
+    "Blupuck",                    // 2: Product
+    "000000000001",               // 3: Serial — TODO read from flash UID
+    "Blupuck Debug",              // 4: CDC interface name
+    "Blupuck Controller 1",       // 5
+    "Blupuck Controller 2",       // 6
+    "Blupuck Controller 3",       // 7
+    "Blupuck Controller 4",       // 8
 };
 
 const uint8_t* tud_descriptor_device_cb(void) {
@@ -52,7 +136,7 @@ const uint8_t* tud_descriptor_device_cb(void) {
 
 const uint8_t* tud_descriptor_configuration_cb(uint8_t index) {
     (void)index;
-    return desc_configuration;
+    return desc_config_4;
 }
 
 const uint8_t* tud_hid_descriptor_report_cb(uint8_t instance) {
@@ -84,7 +168,6 @@ const uint16_t* tud_descriptor_string_cb(uint8_t index, uint16_t langid) {
     return string_desc_buf;
 }
 
-// HID GET_REPORT — not used; host pulls IN reports directly.
 uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id,
                                hid_report_type_t report_type, uint8_t* buffer,
                                uint16_t reqlen) {
@@ -92,7 +175,6 @@ uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id,
     return 0;
 }
 
-// HID SET_REPORT — no OUT reports yet (rumble in a later step).
 void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id,
                            hid_report_type_t report_type, const uint8_t* buffer,
                            uint16_t bufsize) {

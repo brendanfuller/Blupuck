@@ -3,11 +3,36 @@
 #include <string.h>
 #include <tusb.h>
 
-static hid_gamepad_report_t cached;
-static bool dirty;
+#include "log.h"
+
+// One TinyUSB HID instance per bluepad32 slot. Static 1:1 mapping —
+// usb_hid_set_gamepad(N, ...) routes to tud_hid_n_report(N, ...).
+
+static hid_gamepad_report_t cached[BRIDGE_MAX_PLAYERS];
+static bool dirty[BRIDGE_MAX_PLAYERS];
 
 void usb_hid_init(void) {
     tusb_init();
+}
+
+// No longer drives descriptor selection (all 4 are always enumerated) but
+// kept as a placeholder in case future code wants the count.
+uint8_t usb_hid_enumerated_count(void) {
+    return BRIDGE_MAX_PLAYERS;
+}
+
+void usb_hid_set_controller_present(uint8_t slot, bool present) {
+    if (slot >= BRIDGE_MAX_PLAYERS) return;
+    log_str("usb: slot ");
+    log_u(slot);
+    log_line(present ? " present" : " absent");
+
+    if (!present) {
+        // Release any held inputs on the host side by sending one zeroed report.
+        memset(&cached[slot], 0, sizeof(cached[slot]));
+        cached[slot].hat = GAMEPAD_HAT_CENTERED;
+        dirty[slot] = true;
+    }
 }
 
 static inline int8_t scale_stick(int16_t v) {
@@ -34,8 +59,8 @@ static uint8_t map_hat(uint8_t dpad) {
     return GAMEPAD_HAT_CENTERED;
 }
 
-void usb_hid_set_gamepad(uint8_t player, const bridge_gp_state_t* state) {
-    if (player != 0) return;
+void usb_hid_set_gamepad(uint8_t slot, const bridge_gp_state_t* state) {
+    if (slot >= BRIDGE_MAX_PLAYERS) return;
 
     // XInput convention: sticks on X/Y + Rx/Ry, triggers on Z/Rz.
     hid_gamepad_report_t r = {0};
@@ -46,17 +71,20 @@ void usb_hid_set_gamepad(uint8_t player, const bridge_gp_state_t* state) {
     r.z  = (int8_t)((state->lt * 255 / 1024) - 128);
     r.rz = (int8_t)((state->rt * 255 / 1024) - 128);
     r.hat = map_hat(state->dpad);
-    r.buttons = state->buttons;  // BRIDGE_BTN_* layout matches our HID button bits
+    r.buttons = state->buttons;
 
-    cached = r;
-    dirty = true;
+    cached[slot] = r;
+    dirty[slot] = true;
 }
 
 void usb_hid_tick(void) {
     tud_task();
-    if (!tud_hid_ready()) return;
-    if (!dirty) return;
-    if (tud_hid_report(0, &cached, sizeof(cached))) {
-        dirty = false;
+
+    for (int slot = 0; slot < BRIDGE_MAX_PLAYERS; slot++) {
+        if (!dirty[slot]) continue;
+        if (!tud_hid_n_ready((uint8_t)slot)) continue;
+        if (tud_hid_n_report((uint8_t)slot, 0, &cached[slot], sizeof(cached[slot]))) {
+            dirty[slot] = false;
+        }
     }
 }

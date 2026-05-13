@@ -13,14 +13,18 @@ extern "C" {
 #define CFG_TUD_ENDPOINT0_SIZE  64
 #endif
 
-// Step 4: a single HID gamepad. Composite (4× HID + mouse + CDC + vendor) lands later.
-#define CFG_TUD_HID             1
-#define CFG_TUD_CDC             0
+// CDC is the dev/debug serial channel (NOT the Step 9 WebUSB config channel).
+// HID is up to 4 gamepad interfaces — only those tied to a currently-paired
+// controller are advertised at any moment.
+#define CFG_TUD_HID             4
+#define CFG_TUD_CDC             1
 #define CFG_TUD_VENDOR          0
 #define CFG_TUD_MSC             0
 #define CFG_TUD_MIDI            0
 
 #define CFG_TUD_HID_EP_BUFSIZE  64
+#define CFG_TUD_CDC_RX_BUFSIZE  256
+#define CFG_TUD_CDC_TX_BUFSIZE  256
 
 #ifdef __cplusplus
 }

@@ -21,6 +21,7 @@ add_executable(bridge
     src/main.c
     src/bt_host.c
     src/bt_bonds.c
+    src/log.c
     src/usb_descriptors.c
     src/usb_hid.c
     src/usb_cdc.c

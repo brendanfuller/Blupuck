@@ -4,6 +4,7 @@
 #include <uni.h>
 
 #include "gamepad_state.h"
+#include "log.h"
 #include "translate.h"
 #include "usb_hid.h"
 
@@ -13,6 +14,11 @@ static void on_init(int argc, const char** argv) {
 }
 
 static void on_init_complete(void) {
+    log_line("bt: init complete, scanning");
+    // Wipe stored keys until Step 7 lands proper persistence — without this,
+    // stale link keys from a previous firmware run hang the Switch Pro init
+    // handshake after the L2CAP control channel comes up.
+    uni_bt_del_keys_unsafe();
     uni_bt_start_scanning_and_autoconnect_unsafe();
     cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
 }
@@ -22,30 +28,45 @@ static uni_error_t on_device_discovered(bd_addr_t addr, const char* name, uint16
     return UNI_ERROR_SUCCESS;
 }
 
-static void on_device_connected(uni_hid_device_t* d) { (void)d; }
-static void on_device_disconnected(uni_hid_device_t* d) { (void)d; }
+static void on_device_connected(uni_hid_device_t* d) {
+    log_str("bt: connected idx=");
+    log_u((uint32_t)uni_hid_device_get_idx_for_instance(d));
+    log_line("");
+}
+
+static void on_device_disconnected(uni_hid_device_t* d) {
+    const int idx = uni_hid_device_get_idx_for_instance(d);
+    log_str("bt: disconnected idx=");
+    log_u((uint32_t)idx);
+    log_line("");
+    if (idx < 0 || idx >= BRIDGE_MAX_PLAYERS) return;
+    usb_hid_set_controller_present((uint8_t)idx, false);
+}
 
 static uni_error_t on_device_ready(uni_hid_device_t* d) {
-    // Light a single player LED matching the device's bluepad32 slot.
-    // P1 = LED1, P2 = LED2, ... matching the Switch convention.
+    const int idx = uni_hid_device_get_idx_for_instance(d);
+    log_str("bt: ready idx=");
+    log_u((uint32_t)idx);
+    log_line("");
+
+    if (idx < 0 || idx >= BRIDGE_MAX_PLAYERS) return UNI_ERROR_SUCCESS;
+
+    // Light a single player LED matching the controller's slot.
     if (d->report_parser.set_player_leds != NULL) {
-        const int idx = uni_hid_device_get_idx_for_instance(d);
-        d->report_parser.set_player_leds(d, (uint8_t)(1u << (idx & 0x03)));
+        d->report_parser.set_player_leds(d, (uint8_t)(1u << idx));
     }
+    usb_hid_set_controller_present((uint8_t)idx, true);
     return UNI_ERROR_SUCCESS;
 }
 
 static void on_controller_data(uni_hid_device_t* d, uni_controller_t* ctl) {
-    if (ctl->klass != UNI_CONTROLLER_CLASS_GAMEPAD) {
-        return;
-    }
-    if (uni_hid_device_get_idx_for_instance(d) != 0) {
-        return;
-    }
+    if (ctl->klass != UNI_CONTROLLER_CLASS_GAMEPAD) return;
+    const int idx = uni_hid_device_get_idx_for_instance(d);
+    if (idx < 0 || idx >= BRIDGE_MAX_PLAYERS) return;
 
     bridge_gp_state_t state;
     translate_gamepad(&ctl->gamepad, &state);
-    usb_hid_set_gamepad(0, &state);
+    usb_hid_set_gamepad((uint8_t)idx, &state);
 }
 
 static const uni_property_t* get_property(uni_property_idx_t idx) {

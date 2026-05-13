@@ -4,6 +4,7 @@
 #include <uni.h>
 
 #include "bt_host.h"
+#include "log.h"
 #include "usb_hid.h"
 
 // btstack owns the run loop; the USB stack is ticked from a repeating timer.
@@ -22,6 +23,10 @@ int main(void) {
     if (cyw43_arch_init()) {
         return -1;
     }
+
+    // LED ON = booted, init in progress. on_init_complete turns it OFF once
+    // bluepad32/btstack is up.
+    cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
 
     usb_hid_init();
 
