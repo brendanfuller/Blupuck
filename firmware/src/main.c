@@ -40,7 +40,7 @@ int main(void) {
 
     usb_xinput_init();
     usb_cdc_init(on_text_command);
-    usb_webusb_init();
+    usb_webusb_init(bt_host_handle_webusb_command);
 
     uni_platform_set_custom(bt_host_get_platform());
     uni_init(0, NULL);
