@@ -81,4 +81,18 @@
 //   u8   preferred_slot       (0..3)
 #define MSG_SET_SLOT           0x84
 
+// Blink the HOME-button ring LED on the named slot for a few seconds so the
+// user can physically identify which controller is in which slot.
+//   u8   slot
+#define MSG_IDENTIFY           0x85
+
+// "Mirror" `source_mac`'s inputs into the slot owned by `target_mac`. The
+// source's own slot disappears from the host (present=false) and its input
+// state is OR-merged (buttons / dpad) and max-magnitude-merged (sticks /
+// triggers) with the target's into the target's slot. Setting `target_mac`
+// to all-zero clears the mirror for that source.
+//   u8   source_mac[6]
+//   u8   target_mac[6]
+#define MSG_SET_FORWARD        0x86
+
 #endif

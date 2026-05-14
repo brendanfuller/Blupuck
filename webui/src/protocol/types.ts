@@ -18,6 +18,8 @@ export enum MessageType {
   ForgetMac = 0x82,
   ForgetAll = 0x83,
   SetSlot = 0x84,
+  Identify = 0x85,
+  SetForward = 0x86,
 }
 
 export interface HelloPayload {

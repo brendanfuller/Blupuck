@@ -42,14 +42,23 @@
 #define MAX_NR_AVRCP_CONNECTIONS 2
 #define MAX_NR_BNEP_CHANNELS 1
 #define MAX_NR_BNEP_SERVICES 1
-#define MAX_NR_BTSTACK_LINK_KEY_DB_MEMORY_ENTRIES 2
+// In-memory link-key cache. The original 2 was the smoking gun for the
+// "3rd pair drops the 1st" issue: with 3 active BT connections, the 3rd's
+// link key evicted the 1st's, encryption broke, btstack dropped the link.
+// 8 fits 4 controllers with room for transient lookups.
+#define MAX_NR_BTSTACK_LINK_KEY_DB_MEMORY_ENTRIES 8
 #define MAX_NR_GATT_CLIENTS 4
 #define MAX_NR_HCI_CONNECTIONS 4
 #define MAX_NR_HID_HOST_CONNECTIONS 4
 #define MAX_NR_HIDS_CLIENTS 4
 #define MAX_NR_HFP_CONNECTIONS 1
-#define MAX_NR_L2CAP_CHANNELS 6
-#define MAX_NR_L2CAP_SERVICES 5
+// Each connected HID controller consumes 2 L2CAP channels (control +
+// interrupt). With the original 6, pairing a 3rd controller needed a
+// transient channel for SDP/encryption negotiation that pushed over the
+// ceiling and btstack would silently drop the oldest connection. 12 leaves
+// headroom for 4 controllers + transient channels.
+#define MAX_NR_L2CAP_CHANNELS 12
+#define MAX_NR_L2CAP_SERVICES 8
 #define MAX_NR_RFCOMM_CHANNELS 1
 #define MAX_NR_RFCOMM_MULTIPLEXERS 1
 #define MAX_NR_RFCOMM_SERVICES 1
@@ -58,14 +67,17 @@
 #define MAX_NR_WHITELIST_ENTRIES 16
 #define MAX_NR_LE_DEVICE_DB_ENTRIES 16
 
-// Limit number of ACL/SCO Buffer to use by stack to avoid cyw43 shared bus overrun
-#define MAX_NR_CONTROLLER_ACL_BUFFERS 3
+// Bumped from 3 to 8 — WiFi is disabled on the Pico W in this firmware so the
+// cyw43 shared-bus reasoning behind the conservative original doesn't apply.
+// At 3 buffers, a 3rd Switch Pro Controller pairing (which floods the bus
+// with subcommands) starved input from the 1st and the BT supervision
+// timeout eventually dropped the link.
+#define MAX_NR_CONTROLLER_ACL_BUFFERS 8
 #define MAX_NR_CONTROLLER_SCO_PACKETS 3
 
-// Enable and configure HCI Controller to Host Flow Control to avoid cyw43 shared bus overrun
 #define ENABLE_HCI_CONTROLLER_TO_HOST_FLOW_CONTROL
 #define HCI_HOST_ACL_PACKET_LEN 1024
-#define HCI_HOST_ACL_PACKET_NUM 3
+#define HCI_HOST_ACL_PACKET_NUM 8
 #define HCI_HOST_SCO_PACKET_LEN 120
 #define HCI_HOST_SCO_PACKET_NUM 3
 

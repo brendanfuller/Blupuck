@@ -113,3 +113,15 @@ export function encodeSetSlot(mac: Uint8Array, slot: number): Uint8Array {
   payload[PROTOCOL_MAC_LEN] = slot
   return encodeFrame(MessageType.SetSlot, payload)
 }
+
+export function encodeIdentify(slot: number): Uint8Array {
+  return encodeFrame(MessageType.Identify, new Uint8Array([slot]))
+}
+
+// targetMac all zero clears the forward for this source.
+export function encodeSetForward(sourceMac: Uint8Array, targetMac: Uint8Array): Uint8Array {
+  const payload = new Uint8Array(PROTOCOL_MAC_LEN * 2)
+  payload.set(sourceMac, 0)
+  payload.set(targetMac, PROTOCOL_MAC_LEN)
+  return encodeFrame(MessageType.SetForward, payload)
+}
