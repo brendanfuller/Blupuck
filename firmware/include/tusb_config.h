@@ -16,14 +16,20 @@ extern "C" {
 // We spoof the Xbox 360 Wireless Receiver, which is vendor-class, not HID.
 // CDC stays on for debug; the four slot interfaces are handled by our
 // custom xinput class driver registered via usbd_app_driver_get_cb.
-#define CFG_TUD_HID             0
+// One HID interface — a minimal mouse used purely as a wake source. CDC is
+// always-on debug. Four vendor-class slot interfaces handled by our custom
+// XInput class driver, not TinyUSB's class drivers.
+#define CFG_TUD_HID             1
 #define CFG_TUD_CDC             1
-#define CFG_TUD_VENDOR          0
+#define CFG_TUD_VENDOR          1
 #define CFG_TUD_MSC             0
 #define CFG_TUD_MIDI            0
 
-#define CFG_TUD_CDC_RX_BUFSIZE  256
-#define CFG_TUD_CDC_TX_BUFSIZE  256
+#define CFG_TUD_HID_EP_BUFSIZE     16
+#define CFG_TUD_CDC_RX_BUFSIZE     256
+#define CFG_TUD_CDC_TX_BUFSIZE     256
+#define CFG_TUD_VENDOR_RX_BUFSIZE  256
+#define CFG_TUD_VENDOR_TX_BUFSIZE  256
 
 #ifdef __cplusplus
 }

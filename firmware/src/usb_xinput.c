@@ -28,6 +28,7 @@
 #include <device/usbd_pvt.h>
 
 #include "log.h"
+#include "wake.h"
 
 #define XINPUT_ITF_CLASS    0xFF
 #define XINPUT_ITF_SUBCLASS 0x5D
@@ -96,11 +97,20 @@ void usb_xinput_init(void) {
     tusb_init();
 }
 
+static bool any_slot_present(void) {
+    for (int i = 0; i < BRIDGE_MAX_PLAYERS; i++) {
+        if (slots[i].present) return true;
+    }
+    return false;
+}
+
 void usb_xinput_set_controller_present(uint8_t slot, bool present) {
     if (slot >= BRIDGE_MAX_PLAYERS) return;
     log_str("xin: slot ");
     log_u(slot);
     log_line(present ? " present" : " absent");
+
+    const bool was_any_present = any_slot_present();
 
     slots[slot].present = present;
     slots[slot].present_dirty = true;
@@ -109,6 +119,12 @@ void usb_xinput_set_controller_present(uint8_t slot, bool present) {
         // sneak out if the controller drops mid-press.
         memset(&slots[slot].input[2], 0, sizeof(slots[slot].input) - 2);
         slots[slot].input_dirty = true;
+    }
+
+    // First controller to come online wakes the host. Additional controllers
+    // joining an already-active session don't re-wake.
+    if (!was_any_present && present) {
+        wake_trigger();
     }
 }
 
