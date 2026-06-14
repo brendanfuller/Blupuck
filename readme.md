@@ -53,12 +53,15 @@ see: https://bluepad32.readthedocs.io/en/latest/supported_gamepads/
 
 ```
 export PICO_SDK_PATH=/path/to/pico-sdk
-cd firmware
 git submodule update --init --recursive
-mkdir build && cd build
-cmake ..
-make -j
+firmware/patches/apply.sh
+cmake -S firmware -B firmware/build
+cmake --build firmware/build -j
 ```
+
+The bluepad32 submodule is pinned to an upstream commit; `apply.sh` adds the
+small Blupuck patches (Switch HOME-LED control and the no-gyro report mode) on
+top. It is safe to re-run.
 
 Hold the BOOTSEL button while plugging in the Pico W, then copy
 `firmware/build/bridge.uf2` onto the drive that appears.
