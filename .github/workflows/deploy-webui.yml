@@ -9,21 +9,15 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write   # push the built site to the gh-pages branch
 
-# Allow one concurrent deployment, cancel in-progress runs on new pushes.
 concurrency:
   group: pages
   cancel-in-progress: true
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: webui
     steps:
       - uses: actions/checkout@v4
 
@@ -33,20 +27,16 @@ jobs:
           cache: npm
           cache-dependency-path: webui/package-lock.json
 
-      - run: npm ci
+      - name: Install and build
+        working-directory: webui
+        run: |
+          npm ci
+          npm run build
 
-      - run: npm run build
-
-      - uses: actions/upload-pages-artifact@v3
+      - name: Publish to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          path: webui/dist
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: webui/dist
+          # CNAME is copied from webui/public into dist; this keeps it in place.
+          cname: blupuck.brendanfuller.com
