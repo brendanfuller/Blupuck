@@ -140,7 +140,11 @@ async function disconnect() {
 async function send(bytes: Uint8Array) {
   if (!device.value) return
   try {
-    await device.value.transferOut(7, bytes)
+    // Copy into a fresh ArrayBuffer-backed view so the type satisfies
+    // BufferSource (TS won't accept the generic ArrayBufferLike form).
+    const buf = new Uint8Array(bytes.length)
+    buf.set(bytes)
+    await device.value.transferOut(7, buf)
   } catch (e) {
     append(`tx error: ${(e as Error).message}`)
   }

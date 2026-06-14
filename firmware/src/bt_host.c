@@ -1,6 +1,9 @@
 #include "bt_host.h"
 
 #include <btstack.h>
+#include <hardware/structs/ioqspi.h>
+#include <hardware/structs/sio.h>
+#include <hardware/sync.h>
 #include <pico/cyw43_arch.h>
 #include <pico/time.h>
 #include <string.h>
@@ -193,6 +196,37 @@ static void refresh_mac(const uint8_t mac[6]) {
 static btstack_timer_source_t status_timer;
 static btstack_packet_callback_registration_t hci_event_cb;
 
+// Onboard LED + BOOTSEL button. A single 100 ms tick timer polls the button
+// and drives the LED. States:
+//   - solid on:        running, idle
+//   - blink (10 s):    pairing window open (started by a BOOTSEL press)
+//   - 3-blink burst:   a controller just finished pairing
+static btstack_timer_source_t led_timer;
+static uint8_t led_blinks_left;        // connect-burst toggles remaining
+static uint32_t pairing_until_ms;      // 0 = not pairing; else blink + scan until this time
+static bool bootsel_prev;
+static uint8_t led_tick;               // free-running, drives blink cadence
+
+// Reads the BOOTSEL button by briefly tri-stating the QSPI flash CS line and
+// sampling it. Must run from RAM with interrupts off (flash is inaccessible
+// during the read). Returns true while the button is held.
+static bool __no_inline_not_in_flash_func(read_bootsel)(void) {
+    const uint CS_PIN_INDEX = 1;
+    uint32_t flags = save_and_disable_interrupts();
+    hw_write_masked(&ioqspi_hw->io[CS_PIN_INDEX].ctrl,
+                    GPIO_OVERRIDE_LOW << IO_QSPI_GPIO_QSPI_SS_CTRL_OEOVER_LSB,
+                    IO_QSPI_GPIO_QSPI_SS_CTRL_OEOVER_BITS);
+    for (volatile int i = 0; i < 1000; ++i)
+        ;
+    // Button pulls the pin LOW when pressed.
+    bool pressed = !(sio_hw->gpio_hi_in & (1u << CS_PIN_INDEX));
+    hw_write_masked(&ioqspi_hw->io[CS_PIN_INDEX].ctrl,
+                    GPIO_OVERRIDE_NORMAL << IO_QSPI_GPIO_QSPI_SS_CTRL_OEOVER_LSB,
+                    IO_QSPI_GPIO_QSPI_SS_CTRL_OEOVER_BITS);
+    restore_interrupts(flags);
+    return pressed;
+}
+
 // --- WebUSB event emitters ------------------------------------------------
 
 static void emit_hello(void) {
@@ -274,6 +308,59 @@ static void hci_event_handler(uint8_t packet_type, uint16_t channel,
     }
 }
 
+static void set_scanning(bool enabled) {
+    if (scanning_enabled == enabled) return;
+    scanning_enabled = enabled;
+    if (enabled)
+        uni_bt_start_scanning_and_autoconnect_safe();
+    else
+        uni_bt_stop_scanning_safe();
+    emit_scanning();
+}
+
+// Connect-burst: blink 3× then settle. Independent of the pairing window.
+static void led_blink_connect(void) {
+    led_blinks_left = 6;
+}
+
+// Single 100 ms tick: poll BOOTSEL, run the pairing window, drive the LED.
+static void led_timer_handler(btstack_timer_source_t* ts) {
+    const uint32_t now = to_ms_since_boot(get_absolute_time());
+    led_tick++;
+
+    // --- BOOTSEL edge detect ---
+    bool pressed = read_bootsel();
+    if (pressed && !bootsel_prev) {
+        // Open a 10 s pairing window: enable scanning + blink.
+        pairing_until_ms = now + 10000;
+        set_scanning(true);
+        log_line("bootsel: pairing window opened");
+    }
+    bootsel_prev = pressed;
+
+    // --- pairing window expiry ---
+    if (pairing_until_ms != 0 && now >= pairing_until_ms) {
+        pairing_until_ms = 0;
+        set_scanning(false);
+        log_line("bootsel: pairing window closed");
+    }
+
+    // --- LED state ---
+    bool led;
+    if (pairing_until_ms != 0) {
+        led = (led_tick & 1);                 // ~5 Hz blink while pairing
+    } else if (led_blinks_left > 0) {
+        led_blinks_left--;
+        led = !(led_blinks_left & 1);         // 3-blink connect burst
+    } else {
+        led = true;                           // solid-on idle
+    }
+    cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, led ? 1 : 0);
+
+    btstack_run_loop_set_timer(ts, 100);
+    btstack_run_loop_add_timer(ts);
+}
+
 static void status_timer_handler(btstack_timer_source_t* ts) {
     // Stale-data eviction removed: it was false-positiving during 3-way
     // pairings when btstack briefly starved one controller's input pipeline
@@ -293,7 +380,8 @@ static void status_timer_handler(btstack_timer_source_t* ts) {
 static void on_init_complete(void) {
     log_line("bt: init complete (scanning off)");
     // Intentionally not starting scanning — the WebUI toggles it on demand.
-    cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
+    // LED stays solid on once init is done — main turned it on at boot.
+    cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
 
     hci_event_cb.callback = &hci_event_handler;
     hci_add_event_handler(&hci_event_cb);
@@ -301,6 +389,10 @@ static void on_init_complete(void) {
     status_timer.process = &status_timer_handler;
     btstack_run_loop_set_timer(&status_timer, 5000);
     btstack_run_loop_add_timer(&status_timer);
+
+    led_timer.process = &led_timer_handler;
+    btstack_run_loop_set_timer(&led_timer, 100);
+    btstack_run_loop_add_timer(&led_timer);
 }
 
 static void identify_timer_handler(btstack_timer_source_t* ts) {
@@ -411,15 +503,11 @@ void bt_host_handle_webusb_command(uint8_t type, const uint8_t* payload, uint16_
             break;
         case MSG_SET_SCANNING:
             if (len < 1) break;
-            scanning_enabled = (payload[0] != 0);
             log_str("webusb: set_scanning ");
-            log_line(scanning_enabled ? "on" : "off");
-            if (scanning_enabled) {
-                uni_bt_start_scanning_and_autoconnect_safe();
-            } else {
-                uni_bt_stop_scanning_safe();
-            }
-            emit_scanning();
+            log_line(payload[0] ? "on" : "off");
+            // Manual scan toggle also cancels any open BOOTSEL pairing window.
+            pairing_until_ms = 0;
+            set_scanning(payload[0] != 0);
             break;
         case MSG_FORGET_ALL:
             log_line("webusb: forget_all");
@@ -496,6 +584,7 @@ static uni_error_t on_device_ready(uni_hid_device_t* d) {
     if (idx < 0 || idx >= BRIDGE_MAX_PLAYERS) return UNI_ERROR_SUCCESS;
 
     slot_last_data_ms[idx] = to_ms_since_boot(get_absolute_time());
+    led_blink_connect();
 
     // If we have a stored preference for this MAC, route it to that XInput
     // position (swapping with whichever bp currently holds the spot).

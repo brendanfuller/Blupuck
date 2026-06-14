@@ -7,7 +7,6 @@ A dedicated Bluetooth-to-USB bridge that connects multiple Nintendo Switch contr
 - Unreliable wake-from-sleep behavior on the host PC
 - High latency and jitter caused by the host's general-purpose BT stack sharing radio time with other paired devices (mice, headsets, phones)
 - Awkward re-pairing rituals after each power cycle
-- No clean way to handle four-plus controllers simultaneously
 
 By moving the BT work onto a dedicated radio and presenting clean USB HID to the PC, the bridge gives the host a wired-feeling experience while keeping the wireless convenience of the original controllers.
 
