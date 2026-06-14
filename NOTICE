@@ -1,0 +1,33 @@
+Blupuck
+Copyright 2026 Brendan Fuller
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+It includes and/or links against the following third-party components, each
+under its own license:
+
+- Bluepad32 (https://github.com/ricardoquesada/bluepad32)
+  Apache License 2.0.
+  A local fork is vendored at firmware/lib/bluepad32 with modifications
+  (see the prominent change notices in the modified source files).
+
+- BTstack by BlueKitchen GmbH (https://github.com/bluekitchen/btstack)
+  Vendored at firmware/lib/bluepad32/external/btstack under BlueKitchen's
+  license. That license is free for open-source / non-commercial use; a
+  commercial license is otherwise required. The Raspberry Pi Foundation has
+  already obtained a commercial BTstack license that covers use on the
+  Raspberry Pi Pico W and Pico 2 W, which is this project's target hardware.
+  See https://github.com/raspberrypi/pico-sdk/blob/master/src/rp2_common/pico_btstack/LICENSE.RP
+
+- TinyUSB (https://github.com/hathach/tinyusb)
+  MIT License. Provided via the Pico SDK.
+
+- Raspberry Pi Pico SDK (https://github.com/raspberrypi/pico-sdk)
+  BSD-3-Clause License.
+
+- CYW43439 Bluetooth/Wi-Fi firmware
+  Infineon/Broadcom proprietary firmware blob, distributed with the Pico SDK
+  under its own terms.
+
+Web UI dependencies (Vue, Vite, and their transitive packages) are listed in
+webui/package.json and carry their respective MIT/permissive licenses.

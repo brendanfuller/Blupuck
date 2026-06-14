@@ -78,6 +78,14 @@ Open the link it prints, click Connect, and pick Blupuck from the list.
 
 Built on Bluepad32, BTstack, TinyUSB, and the Raspberry Pi Pico SDK.
 
-
 ## License
-MIT
+
+Blupuck's own code (firmware and web UI) is licensed under the Apache License
+2.0. See the LICENSE file.
+
+Bundled and linked third-party components keep their own licenses, listed in
+the NOTICE file. Of note: the BTstack Bluetooth stack carries a BlueKitchen
+license that is free for open-source / non-commercial use; commercial use
+generally requires a paid license, except that the Raspberry Pi Foundation
+already holds a commercial BTstack license covering the Pico W and Pico 2 W,
+which is this project's hardware.
